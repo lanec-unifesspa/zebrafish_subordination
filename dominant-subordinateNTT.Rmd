@@ -1,0 +1,112 @@
+---
+title: "R Notebook for effects of social hierarchies on zebrafish anxiety-like behavior (LaNeC)"
+
+output:
+  github_document 
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Data is produced by members from Laboratório de Neurociências e Comportamento "Frederico Guilherme Graeff", affiliated to Universidade Federal do Sul e Sudeste do Pará and Universidade do Estado do Pará. The package will include primary data for a behavioral experiment on the effects of RS10221 on zebrafish fear-like behavior. In Experiment 1, behavior during exposure was tested; in Experiment 2, behavior after exposure was tested.
+
+* Load needed libraries
+```{r}
+if(!require(ggplot2)){
+    install.packages("ggplot2")
+    library(ggplot2)
+}
+if(!require(dabestr)){
+    install.packages("coin")
+    library(coin)
+}
+if(!require(RCurl)){
+    install.packages("RCurl")
+    library(RCurl)
+}
+
+if(!require(coin)){
+    install.packages("plyr")
+    library(plyr)
+}
+```
+
+* Load data
+
+```{r}
+x1 <- getURL("https://raw.githubusercontent.com/lanec-unifesspa/zebrafish_subordination/main/dominant-subordinateNTT.csv")
+aggression <- read.csv(text = x1)
+aggression$Sex <- factor(aggression$Sex, levels = c("Female", "Male"))
+aggression$Status <- factor(aggression$Status, levels = c("Dominant", "Subordinate"))
+View(aggression)
+
+x2 <- getURL("https://raw.githubusercontent.com/lanec-unifesspa/zebrafish_subordination/main/NTT.csv")
+NTT <- read.csv(text = x2)
+NTT$Sex <- factor(NTT$Sex, levels = c("Female", "Male"))
+NTT$Status <- factor(NTT$Status, levels = c("FemaleControl", "FemaleSubordinate", "FemaleDominant", "MaleControl", "MaleSubordinate", "MaleDominant"))
+View(NTT)
+```
+
+
+* Run POSET test for main and interaction effects on aggression variables
+```{r}
+#Coherence criterion
+coherence <- function(data) {
+x <- as.matrix(data)
+matrix(apply(x, 1, function(y)
+sum(colSums(t(x) < y) == ncol(x)) -
+sum(colSums(t(x) > y) == ncol(x))), ncol = 1)
+}
+
+#Asymptotic POSET test
+poset <- independence_test(Chasing + TimeBottom + Attacks + Freezing + Retreats ~ Sex:Status, data = aggression, ytraf = coherence)
+poset
+pvalue(poset, method = "step-down")
+```
+
+```{r}
+#Asymptotic POSET test
+poset <- independence_test(TimeBottomNTT + AbsoluteTurnAngle + Freezing + Speed ~ Sex:Status, data = NTT, ytraf = coherence)
+poset
+pvalue(poset, method = "step-down")
+```
+
+
+* Prepare data for estimation plots of NTT variables
+```{r}
+TT.multi.group <- NTT %>% dabest(Status, TimeTopNTT,
+idx = list(c("FemaleControl", "FemaleDominant", "FemaleSubordinate"),
+c("MaleControl", "MaleDominant", "MaleSubordinate")),
+paired = FALSE
+)
+TT.multi.group.mean_diff <- TT.multi.group %>% mean_diff()
+ATA.multi.group <- NTT %>% dabest(Status, AbsoluteTurnAngle,
+idx = list(c("FemaleControl", "FemaleDominant", "FemaleSubordinate"),
+c("MaleControl", "MaleDominant", "MaleSubordinate")),
+paired = FALSE
+)
+ATA.multi.group.mean_diff <- ATA.multi.group %>% mean_diff()
+FR.multi.group <- NTT %>% dabest(Status, Freezing,
+idx = list(c("FemaleControl", "FemaleDominant", "FemaleSubordinate"),
+c("MaleControl", "MaleDominant", "MaleSubordinate")),
+paired = FALSE
+)
+FR.multi.group.mean_diff <- FR.multi.group %>% mean_diff()
+SP.multi.group <- NTT %>% dabest(Status, Speed,
+idx = list(c("FemaleControl", "FemaleDominant", "FemaleSubordinate"),
+c("MaleControl", "MaleDominant", "MaleSubordinate")),
+paired = FALSE
+)
+SP.multi.group.mean_diff <- SP.multi.group %>% mean_diff()
+```
+
+* Plot data
+```{r}
+TBplot <- plot(TB.multi.group.mean_diff, color.column = Sex, rawplot.ylim = c(0, 360), rawplot.ylabel = "Time spent in the bottom third (s)", axes.title.fontsize = 10, theme = ggplot2::theme_bw(), palette = c("#1b9e77", "#d95f02"))
+TTplot <- plot(TT.multi.group.mean_diff, color.column = Sex, rawplot.ylim = c(0, 360), rawplot.ylabel = "Time spent in the top third (s)", axes.title.fontsize = 10, theme = ggplot2::theme_bw(), palette = c("#1b9e77", "#d95f02"))
+ESplot <- plot(ATA.multi.group.mean_diff, color.column = Sex, rawplot.ylim = c(0, 60), rawplot.ylabel = "Absolute turn angle (º)", axes.title.fontsize = 10, theme = ggplot2::theme_bw(), palette = c("#1b9e77", "#d95f02"))
+FRplot <- plot(FR.multi.group.mean_diff, color.column = Sex, rawplot.ylim = c(0, 360), rawplot.ylabel = "Freezing (s)", axes.title.fontsize = 10, theme = ggplot2::theme_bw(), palette = c("#1b9e77", "#d95f02"))
+SPplot <- plot(FR.multi.group.mean_diff, color.column = Sex, rawplot.ylim = c(0, 360), rawplot.ylabel = "Speed (cm/s)", axes.title.fontsize = 10, theme = ggplot2::theme_bw(), palette = c("#1b9e77", "#d95f02"))
+ggarrange(TTplot, TBplot, ESplot, FRplot, SPplot, nrow = 2, ncol = 3, common.legend = TRUE)
+```
